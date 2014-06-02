@@ -12,7 +12,7 @@ from setuptools import setup
 
 setup(
     name = 'JSONMapper',
-    version = '0.1',
+    version = '0.2',
     description = '',
     long_description = '',
     author = 'Matt Good',

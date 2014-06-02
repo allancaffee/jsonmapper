@@ -331,10 +331,22 @@ class DictField(Field):
     >>> blog.post.author.name
     u'John Doe'
 
+    >>> class Blog(Mapping):
+    ...   post = DictField(Post, default=None)
+
+    >>> blog = Blog()
+    >>> blog.post is None
+    True
+
     """
-    def __init__(self, mapping=None, name=None, default=None):
-        default = default or {}
-        Field.__init__(self, name=name, default=lambda: default.copy())
+    def __init__(self, mapping=None, name=None, default=DEFAULT):
+        if default is DEFAULT:
+            default = {}
+        elif callable(getattr(default, 'copy', None)):
+            default = default.copy
+        else:
+            default = default
+        Field.__init__(self, name=name, default=default)
         self.mapping = mapping
 
     def _to_python(self, value):
