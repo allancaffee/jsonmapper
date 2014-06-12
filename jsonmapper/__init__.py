@@ -23,6 +23,48 @@ To define a document mapping, you declare a Python class inherited from
 >>> person.age
 42
 
+In addition to wrapping dictionaries in Python objects JSONMapper can be used
+to validate JSON data structures. This allows for input validation like one
+might use for a REST API. If we had an API to that acted as a directory for
+`People` we might validate the input to make sure the requrired fields `name`
+and `age` were specified.
+
+>>> person = Person(age=42)
+>>> person.validate()
+Traceback (most recent call last):
+...
+ValueError: Field 'name' has no default and was not specified.
+>>> person.name
+Traceback (most recent call last):
+...
+AttributeError: A value was not set for 'name' and there is no default.
+>>> person.name = 'John Doe'
+>>> person.validate()
+
+Notice that `name` and `age` are required because no default value was
+specified. If we wanted to allow age to be optional we could set a default. In
+this case ``None`` will suffice:
+
+>>> class Person(Mapping):
+...     name = TextField()
+...     age = IntegerField(default=None)
+...     added = DateTimeField(default=datetime.now)
+>>> person = Person(name='John Doe')
+>>> person.age is None
+True
+>>> person.validate()
+
+Of course more often than not you'll be reading your input from a JSON dict
+rather than contstructing it explicitly. The :method:`Mapping.wrap` method
+wraps a dictionary to provide a mapping object.
+
+>>> content = {'age': 42}
+>>> person = Person.wrap(content)
+>>> person.validate()
+Traceback (most recent call last):
+...
+ValueError: Field 'name' has no default and was not specified.
+
 """
 
 import copy
@@ -50,25 +92,32 @@ class Field(object):
     the mapping of a document.
     """
 
-    def __init__(self, name=None, default=None):
+    def __init__(self, name=None, default=DEFAULT):
         self.name = name
         self.default = default
+        self.is_required = default is DEFAULT
 
     def __get__(self, instance, owner):
         if instance is None:
             return self
-        value = instance._data.get(self.name)
-        if value is not None:
+        value = instance._data.get(self.name, DEFAULT)
+        if self.default is DEFAULT and value is DEFAULT:
+          raise AttributeError('A value was not set for %r and there is no default.' % self.name)
+
+        if value not in (None, DEFAULT):
             value = self._to_python(value)
-        elif self.default is not None:
+        elif self.default is not DEFAULT:
             default = self.default
             if callable(default):
                 default = default()
             value = default
+
         return value
 
     def __set__(self, instance, value):
-        if value is not None:
+        # I feel like this should just be 'is not DEFAULT' but
+        # everything breaks when I set it to this.
+        if value not in (DEFAULT, None):
             value = self._to_json(value)
         instance._data[self.name] = value
 
@@ -104,7 +153,14 @@ class Mapping(object):
             if attrname in values:
                 setattr(self, attrname, values.pop(attrname))
             else:
-                setattr(self, attrname, getattr(self, attrname))
+                try:
+                  # Try to get and set the attribute to convert it to Python if
+                  # it's set. If it isn't set and there isn't a default then
+                  # catch the error and ignore it. The user will see the error
+                  # when they call validate or attempt to access the attribute.
+                  setattr(self, attrname, getattr(self, attrname))
+                except AttributeError:
+                  pass
 
     def __repr__(self):
         return '<%s %r>' % (type(self).__name__, self._data)
@@ -173,6 +229,37 @@ class Mapping(object):
         :return: a list of ``(name, value)`` tuples
         """
         return self._data.items()
+
+    def validate(self, allow_extras=False):
+        """Validate the correctness of the fields.
+
+        This method checks both that all defined fields have values. If any
+        field does not have an explicit value and a default is provided the
+        field will be set to the specified default.
+
+        :keyword allow_extras: If set to ``True`` no error will be raised if
+            unknown fields are found in the dict. By default a
+            :exc:`ValueError` will be raised.
+        :raises ValueError: If any field is not present in this
+            :class:`Mapping` and there is no default value.
+        """
+        for name, field in self._fields.items():
+            if field.is_required and self._data.get(name, DEFAULT) is DEFAULT:
+                raise ValueError('Field %r has no default and was not specified.' % name)
+
+            # Check that the field converts properly.
+            value = getattr(self, name)
+            setattr(self, name, value)
+            # Recurse into Mappings where possible.
+            if callable(getattr(value, 'validate', None)):
+                value.validate(allow_extras=allow_extras)
+
+        if not allow_extras:
+            for name, value in self._data.items():
+                if name not in self._fields:
+                    raise ValueError(
+                        'Encountered unexpected field %r in mapping of type %s. Value was %r.' % (
+                            name, type(self).__name__, value))
 
 
 class TextField(Field):
@@ -328,8 +415,10 @@ class DictField(Field):
     u'Foo'
 
     >>> blog = Blog(post=post)
+    >>> blog.post.content = "My super interesting blog post!"
     >>> blog.post.author.name
     u'John Doe'
+    >>> blog.validate()
 
     >>> class Blog(Mapping):
     ...   post = DictField(Post, default=None)
@@ -557,3 +646,8 @@ class ListField(Field):
 
         def pop(self, *args):
             return self.field._to_python(self.list.pop(*args))
+
+        def validate(self, *args, **kwargs):
+            for value in self:
+                if callable(getattr(value, 'validate', None)):
+                  value.validate(*args, **kwargs)
