@@ -430,7 +430,7 @@ class DictField(Field):
     """
     def __init__(self, mapping=None, name=None, default=DEFAULT):
         if default is DEFAULT:
-            default = {}
+            default = dict
         elif callable(getattr(default, 'copy', None)):
             default = default.copy
         else:
