@@ -17,8 +17,8 @@ def test_validate():
 
     # Wrong value for age.
     p = Person.wrap({
-      'name': 'John Doe',
-      'age': 'a string',
+        'name': 'John Doe',
+        'age': 'a string',
     })
     with pytest.raises(ValueError):
         p.validate()
@@ -29,9 +29,9 @@ def test_validate():
         p.validate()
 
     p = Person.wrap({
-      'name': 'John Doe',
-      'age': 42,
-      'unknown': 'data',
+        'name': 'John Doe',
+        'age': 42,
+        'unknown': 'data',
     })
     with pytest.raises(ValueError):
         p.validate()

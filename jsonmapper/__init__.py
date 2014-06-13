@@ -102,7 +102,7 @@ class Field(object):
             return self
         value = instance._data.get(self.name, DEFAULT)
         if self.default is DEFAULT and value is DEFAULT:
-          raise AttributeError('A value was not set for %r and there is no default.' % self.name)
+            raise AttributeError('A value was not set for %r and there is no default.' % self.name)
 
         if value not in (None, DEFAULT):
             value = self._to_python(value)
@@ -154,13 +154,13 @@ class Mapping(object):
                 setattr(self, attrname, values.pop(attrname))
             else:
                 try:
-                  # Try to get and set the attribute to convert it to Python if
-                  # it's set. If it isn't set and there isn't a default then
-                  # catch the error and ignore it. The user will see the error
-                  # when they call validate or attempt to access the attribute.
-                  setattr(self, attrname, getattr(self, attrname))
+                    # Try to get and set the attribute to convert it to Python if
+                    # it's set. If it isn't set and there isn't a default then
+                    # catch the error and ignore it. The user will see the error
+                    # when they call validate or attempt to access the attribute.
+                    setattr(self, attrname, getattr(self, attrname))
                 except AttributeError:
-                  pass
+                    pass
 
     def __repr__(self):
         return '<%s %r>' % (type(self).__name__, self._data)
